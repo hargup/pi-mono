@@ -158,6 +158,7 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/tree` | Jump to any point in the session and continue from there |
 | `/fork` | Create a new session from the current branch |
 | `/compact [prompt]` | Manually compact context, optional custom instructions |
+| `/compact-head <n> [prompt]` | Manually compact the oldest `n` messages (head), keep newer tail untouched |
 | `/copy` | Copy last assistant message to clipboard |
 | `/export [file]` | Export session to HTML file |
 | `/share` | Upload as private GitHub gist with shareable HTML link |
@@ -228,7 +229,13 @@ pi --session <path>    # Use specific session file or ID
 
 Long sessions can exhaust context windows. Compaction summarizes older messages while keeping recent ones.
 
-**Manual:** `/compact` or `/compact <custom instructions>`
+**Terminology:**
+- **Head** = oldest part of the conversation (prefix)
+- **Tail** = newest/recent part of the conversation (suffix)
+
+**Manual:**
+- `/compact` or `/compact <custom instructions>`
+- `/compact-head <n> [custom instructions]` to compact the oldest `n` messages (head-first compaction)
 
 **Automatic:** Enabled by default. Triggers on context overflow (recovers and retries) or when approaching the limit (proactive). Configure via `/settings` or `settings.json`.
 

@@ -12,6 +12,7 @@ import {
 	findCutPoint,
 	getLastAssistantUsage,
 	prepareCompaction,
+	prepareCompactionByHeadMessageCount,
 	shouldCompact,
 } from "../src/core/compaction/index.js";
 import {
@@ -269,6 +270,35 @@ describe("findCutPoint", () => {
 			expect(result.isSplitTurn).toBe(true);
 			expect(result.turnStartIndex).toBe(2); // Turn 2 starts at index 2
 		}
+	});
+});
+
+describe("prepareCompactionByHeadMessageCount", () => {
+	it("should compact oldest N messages while keeping newer tail", () => {
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("u1")),
+			createMessageEntry(createAssistantMessage("a1")),
+			createMessageEntry(createUserMessage("u2")),
+			createMessageEntry(createAssistantMessage("a2")),
+			createMessageEntry(createUserMessage("u3")),
+			createMessageEntry(createAssistantMessage("a3")),
+		];
+
+		const preparation = prepareCompactionByHeadMessageCount(entries, DEFAULT_COMPACTION_SETTINGS, 2);
+		expect(preparation).toBeDefined();
+		expect(preparation!.messagesToSummarize.length).toBeGreaterThanOrEqual(2);
+		expect(preparation!.messagesToSummarize.length).toBeLessThan(entries.length);
+		expect(preparation!.firstKeptEntryId).toBeTruthy();
+	});
+
+	it("should return undefined when compacting everything", () => {
+		const entries: SessionEntry[] = [
+			createMessageEntry(createUserMessage("u1")),
+			createMessageEntry(createAssistantMessage("a1")),
+		];
+
+		const preparation = prepareCompactionByHeadMessageCount(entries, DEFAULT_COMPACTION_SETTINGS, 2);
+		expect(preparation).toBeUndefined();
 	});
 });
 

@@ -1951,6 +1951,11 @@ export class InteractiveMode {
 				await this.handleCompactCommand(customInstructions);
 				return;
 			}
+			if (text === "/compact-head" || text.startsWith("/compact-head ")) {
+				this.editor.setText("");
+				await this.handleCompactHeadCommand(text);
+				return;
+			}
 			if (text === "/reload") {
 				this.editor.setText("");
 				await this.handleReloadCommand();
@@ -4311,6 +4316,38 @@ export class InteractiveMode {
 		await this.executeCompaction(customInstructions, false);
 	}
 
+	private async handleCompactHeadCommand(rawText: string): Promise<void> {
+		const args = rawText.replace(/^\/compact-head\s*/, "").trim();
+		if (!args) {
+			this.showWarning("Usage: /compact-head <message-count> [custom instructions]");
+			return;
+		}
+
+		const firstSpace = args.indexOf(" ");
+		const countStr = firstSpace === -1 ? args : args.slice(0, firstSpace);
+		const customInstructions = firstSpace === -1 ? undefined : args.slice(firstSpace + 1).trim() || undefined;
+		const headMessageCount = Number.parseInt(countStr, 10);
+		if (!Number.isInteger(headMessageCount) || headMessageCount <= 0) {
+			this.showWarning("/compact-head requires a positive integer message count");
+			return;
+		}
+
+		const entries = this.sessionManager.getEntries();
+		const messageCount = entries.filter((e) => e.type === "message").length;
+		if (messageCount < 2) {
+			this.showWarning("Nothing to compact (session too small)");
+			return;
+		}
+		if (headMessageCount >= messageCount) {
+			this.showWarning(
+				`/compact-head ${headMessageCount} would compact everything. Keep at least one message (current total: ${messageCount}).`,
+			);
+			return;
+		}
+
+		await this.executeHeadCompaction(headMessageCount, customInstructions);
+	}
+
 	private async executeCompaction(customInstructions?: string, isAuto = false): Promise<CompactionResult | undefined> {
 		// Stop loading animation
 		if (this.loadingAnimation) {
@@ -4357,6 +4394,57 @@ export class InteractiveMode {
 				this.showError("Compaction cancelled");
 			} else {
 				this.showError(`Compaction failed: ${message}`);
+			}
+		} finally {
+			compactingLoader.stop();
+			this.statusContainer.clear();
+			this.defaultEditor.onEscape = originalOnEscape;
+		}
+		void this.flushCompactionQueue({ willRetry: false });
+		return result;
+	}
+
+	private async executeHeadCompaction(
+		headMessageCount: number,
+		customInstructions?: string,
+	): Promise<CompactionResult | undefined> {
+		if (this.loadingAnimation) {
+			this.loadingAnimation.stop();
+			this.loadingAnimation = undefined;
+		}
+		this.statusContainer.clear();
+
+		const originalOnEscape = this.defaultEditor.onEscape;
+		this.defaultEditor.onEscape = () => {
+			this.session.abortCompaction();
+		};
+
+		this.chatContainer.addChild(new Spacer(1));
+		const cancelHint = `(${appKey(this.keybindings, "interrupt")} to cancel)`;
+		const label = `Compacting oldest ${headMessageCount} messages... ${cancelHint}`;
+		const compactingLoader = new Loader(
+			this.ui,
+			(spinner) => theme.fg("accent", spinner),
+			(text) => theme.fg("muted", text),
+			label,
+		);
+		this.statusContainer.addChild(compactingLoader);
+		this.ui.requestRender();
+
+		let result: CompactionResult | undefined;
+		try {
+			result = await this.session.compactHead(headMessageCount, customInstructions);
+
+			this.rebuildChatFromMessages();
+			const msg = createCompactionSummaryMessage(result.summary, result.tokensBefore, new Date().toISOString());
+			this.addMessageToChat(msg);
+			this.footer.invalidate();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message === "Compaction cancelled" || (error instanceof Error && error.name === "AbortError")) {
+				this.showError("Compaction cancelled");
+			} else {
+				this.showError(`Head compaction failed: ${message}`);
 			}
 		} finally {
 			compactingLoader.stop();

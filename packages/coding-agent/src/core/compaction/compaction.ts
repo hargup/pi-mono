@@ -622,6 +622,17 @@ export function prepareCompaction(
 
 	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
 
+	return buildPreparationFromCutPoint(pathEntries, settings, prevCompactionIndex, boundaryStart, cutPoint, tokensBefore);
+}
+
+function buildPreparationFromCutPoint(
+	pathEntries: SessionEntry[],
+	settings: CompactionSettings,
+	prevCompactionIndex: number,
+	boundaryStart: number,
+	cutPoint: CutPointResult,
+	tokensBefore: number,
+): CompactionPreparation | undefined {
 	// Get UUID of first kept entry
 	const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
 	if (!firstKeptEntry?.id) {
@@ -674,6 +685,86 @@ export function prepareCompaction(
 		fileOps,
 		settings,
 	};
+}
+
+/**
+ * Manual head compaction: compact the oldest N messages and keep the rest untouched.
+ *
+ * N is a lower bound; to preserve turn boundaries and valid cut points, compaction may
+ * include slightly more than N messages.
+ */
+export function prepareCompactionByHeadMessageCount(
+	pathEntries: SessionEntry[],
+	settings: CompactionSettings,
+	headMessageCount: number,
+): CompactionPreparation | undefined {
+	if (!Number.isInteger(headMessageCount) || headMessageCount <= 0) {
+		return undefined;
+	}
+
+	if (pathEntries.length > 0 && pathEntries[pathEntries.length - 1].type === "compaction") {
+		return undefined;
+	}
+
+	let prevCompactionIndex = -1;
+	for (let i = pathEntries.length - 1; i >= 0; i--) {
+		if (pathEntries[i].type === "compaction") {
+			prevCompactionIndex = i;
+			break;
+		}
+	}
+	const boundaryStart = prevCompactionIndex + 1;
+	const boundaryEnd = pathEntries.length;
+
+	const usageStart = prevCompactionIndex >= 0 ? prevCompactionIndex : 0;
+	const usageMessages: AgentMessage[] = [];
+	for (let i = usageStart; i < boundaryEnd; i++) {
+		const msg = getMessageFromEntry(pathEntries[i]);
+		if (msg) usageMessages.push(msg);
+	}
+	const tokensBefore = estimateContextTokens(usageMessages).tokens;
+
+	const messageIndices: number[] = [];
+	for (let i = boundaryStart; i < boundaryEnd; i++) {
+		if (pathEntries[i].type === "message") messageIndices.push(i);
+	}
+
+	// Need at least one message left un-compacted
+	if (messageIndices.length < 2 || headMessageCount >= messageIndices.length) {
+		return undefined;
+	}
+
+	const cutPoints = findValidCutPoints(pathEntries, boundaryStart, boundaryEnd);
+	if (cutPoints.length === 0) {
+		return undefined;
+	}
+
+	const targetMessageIndex = messageIndices[headMessageCount - 1];
+	let cutIndex = cutPoints[cutPoints.length - 1];
+	for (const cp of cutPoints) {
+		if (cp > targetMessageIndex) {
+			cutIndex = cp;
+			break;
+		}
+	}
+
+	// Include contiguous non-message metadata preceding cutIndex
+	while (cutIndex > boundaryStart) {
+		const prevEntry = pathEntries[cutIndex - 1];
+		if (prevEntry.type === "compaction" || prevEntry.type === "message") break;
+		cutIndex--;
+	}
+
+	const cutEntry = pathEntries[cutIndex];
+	const isUserMessage = cutEntry.type === "message" && cutEntry.message.role === "user";
+	const turnStartIndex = isUserMessage ? -1 : findTurnStartIndex(pathEntries, cutIndex, boundaryStart);
+	const cutPoint: CutPointResult = {
+		firstKeptEntryIndex: cutIndex,
+		turnStartIndex,
+		isSplitTurn: !isUserMessage && turnStartIndex !== -1,
+	};
+
+	return buildPreparationFromCutPoint(pathEntries, settings, prevCompactionIndex, boundaryStart, cutPoint, tokensBefore);
 }
 
 // ============================================================================
