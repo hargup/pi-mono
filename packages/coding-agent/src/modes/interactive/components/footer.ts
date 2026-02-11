@@ -78,9 +78,11 @@ export class FooterComponent implements Component {
 			}
 		}
 
-		// Calculate context usage from session (handles compaction correctly).
+		// Calculate CURRENT context usage from active session messages.
+		// This updates immediately after compaction.
 		// After compaction, tokens are unknown until the next LLM response.
 		const contextUsage = this.session.getContextUsage();
+		const contextTokens = contextUsage?.tokens ?? 0;
 		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
 		const contextPercentValue = contextUsage?.percent ?? 0;
 		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
@@ -117,11 +119,13 @@ export class FooterComponent implements Component {
 		}
 
 		// Build stats line
+		// Σ-prefixed counters are cumulative (full session lifetime), not current context.
 		const statsParts = [];
-		if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
-		if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
-		if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
-		if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
+		if (totalInput) statsParts.push(`Σ↑${formatTokens(totalInput)}`);
+		if (totalOutput) statsParts.push(`Σ↓${formatTokens(totalOutput)}`);
+		if (totalCacheRead) statsParts.push(`ΣR${formatTokens(totalCacheRead)}`);
+		if (totalCacheWrite) statsParts.push(`ΣW${formatTokens(totalCacheWrite)}`);
+		statsParts.push(`ctx${formatTokens(contextTokens)}`);
 
 		// Show cost with "(sub)" indicator if using OAuth subscription
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
