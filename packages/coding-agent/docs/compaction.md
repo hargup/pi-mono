@@ -17,7 +17,7 @@ Pi has two summarization mechanisms:
 
 | Mechanism | Trigger | Purpose |
 |-----------|---------|---------|
-| Compaction | Context exceeds threshold, or `/compact` | Summarize old messages to free up context |
+| Compaction | Context exceeds threshold, `/compact`, or `/compact-head` | Summarize old messages to free up context |
 | Branch summarization | `/tree` navigation | Preserve context when switching branches |
 
 Both use the same structured summary format and track file operations cumulatively.
@@ -34,7 +34,23 @@ contextTokens > contextWindow - reserveTokens
 
 By default, `reserveTokens` is 16384 tokens (configurable in `~/.pi/agent/settings.json` or `<project-dir>/.pi/settings.json`). This leaves room for the LLM's response.
 
-You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
+You can also trigger manually with:
+- `/compact [instructions]` (default token-budget compaction)
+- `/compact-head <n> [instructions]` (compact the oldest `n` messages, keeping the recent tail intact)
+
+Terminology used in this doc:
+- **Head** = oldest conversation prefix
+- **Tail** = newest conversation suffix
+
+### `/compact-head` behavior details
+
+`/compact-head` is incremental and branch-local:
+
+1. It compacts the oldest `n` messages in the current active post-compaction window.
+2. It preserves valid cut points (turn boundaries), so compacted count may be slightly greater than `n`.
+3. It always keeps at least one message in the live tail.
+4. If the latest entry is already a compaction entry, it returns `Already compacted` until new messages are added.
+5. Running `/compact-head` multiple times in the same thread compacts progressively newer chunks; it does not re-compact the original full history each time.
 
 ### How It Works
 
