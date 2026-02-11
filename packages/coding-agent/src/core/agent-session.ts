@@ -38,6 +38,7 @@ import {
 	estimateContextTokens,
 	generateBranchSummary,
 	prepareCompaction,
+	prepareCompactionByHeadMessageCount,
 	shouldCompact,
 } from "./compaction/index.js";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.js";
@@ -1460,6 +1461,121 @@ export class AgentSession {
 			this.agent.replaceMessages(sessionContext.messages);
 
 			// Get the saved compaction entry for the extension event
+			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
+				| CompactionEntry
+				| undefined;
+
+			if (this._extensionRunner && savedCompactionEntry) {
+				await this._extensionRunner.emit({
+					type: "session_compact",
+					compactionEntry: savedCompactionEntry,
+					fromExtension,
+				});
+			}
+
+			return {
+				summary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+			};
+		} finally {
+			this._compactionAbortController = undefined;
+			this._reconnectToAgent();
+		}
+	}
+
+	/**
+	 * Manually compact the HEAD of the session: summarize the oldest N messages,
+	 * keep the newer messages intact.
+	 *
+	 * N is a lower bound. To preserve valid turn boundaries, compaction may include
+	 * slightly more than N messages.
+	 */
+	async compactHead(headMessageCount: number, customInstructions?: string): Promise<CompactionResult> {
+		this._disconnectFromAgent();
+		await this.abort();
+		this._compactionAbortController = new AbortController();
+
+		try {
+			if (!this.model) {
+				throw new Error("No model selected");
+			}
+
+			const apiKey = await this._modelRegistry.getApiKey(this.model);
+			if (!apiKey) {
+				throw new Error(`No API key for ${this.model.provider}`);
+			}
+
+			const pathEntries = this.sessionManager.getBranch();
+			const settings = this.settingsManager.getCompactionSettings();
+
+			const preparation = prepareCompactionByHeadMessageCount(pathEntries, settings, headMessageCount);
+			if (!preparation) {
+				const lastEntry = pathEntries[pathEntries.length - 1];
+				if (lastEntry?.type === "compaction") {
+					throw new Error("Already compacted");
+				}
+				throw new Error(
+					`Nothing to compact for /compact-head ${headMessageCount}. Need at least two messages and at least one message kept after compaction.`,
+				);
+			}
+
+			let extensionCompaction: CompactionResult | undefined;
+			let fromExtension = false;
+
+			if (this._extensionRunner?.hasHandlers("session_before_compact")) {
+				const result = (await this._extensionRunner.emit({
+					type: "session_before_compact",
+					preparation,
+					branchEntries: pathEntries,
+					customInstructions,
+					signal: this._compactionAbortController.signal,
+				})) as SessionBeforeCompactResult | undefined;
+
+				if (result?.cancel) {
+					throw new Error("Compaction cancelled");
+				}
+
+				if (result?.compaction) {
+					extensionCompaction = result.compaction;
+					fromExtension = true;
+				}
+			}
+
+			let summary: string;
+			let firstKeptEntryId: string;
+			let tokensBefore: number;
+			let details: unknown;
+
+			if (extensionCompaction) {
+				summary = extensionCompaction.summary;
+				firstKeptEntryId = extensionCompaction.firstKeptEntryId;
+				tokensBefore = extensionCompaction.tokensBefore;
+				details = extensionCompaction.details;
+			} else {
+				const result = await compact(
+					preparation,
+					this.model,
+					apiKey,
+					customInstructions,
+					this._compactionAbortController.signal,
+				);
+				summary = result.summary;
+				firstKeptEntryId = result.firstKeptEntryId;
+				tokensBefore = result.tokensBefore;
+				details = result.details;
+			}
+
+			if (this._compactionAbortController.signal.aborted) {
+				throw new Error("Compaction cancelled");
+			}
+
+			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
+			const newEntries = this.sessionManager.getEntries();
+			const sessionContext = this.sessionManager.buildSessionContext();
+			this.agent.replaceMessages(sessionContext.messages);
+
 			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
 				| CompactionEntry
 				| undefined;
