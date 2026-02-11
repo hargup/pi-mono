@@ -42,6 +42,16 @@ Terminology used in this doc:
 - **Head** = oldest conversation prefix
 - **Tail** = newest conversation suffix
 
+### `/compact-head` behavior details
+
+`/compact-head` is incremental and branch-local:
+
+1. It compacts the oldest `n` messages in the current active post-compaction window.
+2. It preserves valid cut points (turn boundaries), so compacted count may be slightly greater than `n`.
+3. It always keeps at least one message in the live tail.
+4. If the latest entry is already a compaction entry, it returns `Already compacted` until new messages are added.
+5. Running `/compact-head` multiple times in the same thread compacts progressively newer chunks; it does not re-compact the original full history each time.
+
 ### How It Works
 
 1. **Find cut point**: Walk backwards from newest message, accumulating token estimates until `keepRecentTokens` (default 20k, configurable in `~/.pi/agent/settings.json` or `<project-dir>/.pi/settings.json`) is reached

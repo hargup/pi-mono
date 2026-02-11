@@ -237,6 +237,11 @@ Long sessions can exhaust context windows. Compaction summarizes older messages 
 - `/compact` or `/compact <custom instructions>`
 - `/compact-head <n> [custom instructions]` to compact the oldest `n` messages (head-first compaction)
 
+`/compact-head` notes:
+- It is incremental: repeated runs compact progressively newer chunks in the current thread.
+- It preserves turn boundaries, so actual compacted count can be slightly larger than `n`.
+- If the latest entry is already a compaction entry, add new messages first (otherwise you'll see `Already compacted`).
+
 **Automatic:** Enabled by default. Triggers on context overflow (recovers and retries) or when approaching the limit (proactive). Configure via `/settings` or `settings.json`.
 
 Compaction is lossy. The full history remains in the JSONL file; use `/tree` to revisit. Customize compaction behavior via [extensions](#extensions). See [docs/compaction.md](docs/compaction.md) for internals.
