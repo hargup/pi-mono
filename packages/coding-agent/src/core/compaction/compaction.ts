@@ -622,7 +622,14 @@ export function prepareCompaction(
 
 	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
 
-	return buildPreparationFromCutPoint(pathEntries, settings, prevCompactionIndex, boundaryStart, cutPoint, tokensBefore);
+	return buildPreparationFromCutPoint(
+		pathEntries,
+		settings,
+		prevCompactionIndex,
+		boundaryStart,
+		cutPoint,
+		tokensBefore,
+	);
 }
 
 function buildPreparationFromCutPoint(
@@ -764,7 +771,14 @@ export function prepareCompactionByHeadMessageCount(
 		isSplitTurn: !isUserMessage && turnStartIndex !== -1,
 	};
 
-	return buildPreparationFromCutPoint(pathEntries, settings, prevCompactionIndex, boundaryStart, cutPoint, tokensBefore);
+	return buildPreparationFromCutPoint(
+		pathEntries,
+		settings,
+		prevCompactionIndex,
+		boundaryStart,
+		cutPoint,
+		tokensBefore,
+	);
 }
 
 // ============================================================================
