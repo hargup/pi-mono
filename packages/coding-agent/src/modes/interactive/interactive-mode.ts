@@ -4410,7 +4410,8 @@ export class InteractiveMode {
 	private async handleContextManageAliasCommand(rawText: string): Promise<void> {
 		const args = rawText.replace(/^\/context-manage\s*/, "").trim();
 		this.showWarning("/context-manage is deprecated. Use /context instead.");
-		const forwarded = args ? `/context ${args}` : "/context";
+		const translatedArgs = args.startsWith("synthesis ") ? `note ${args.slice(10)}` : args;
+		const forwarded = translatedArgs ? `/context ${translatedArgs}` : "/context";
 		await this.handleContextCommand(forwarded);
 	}
 
