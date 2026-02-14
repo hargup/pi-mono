@@ -1945,6 +1945,11 @@ export class InteractiveMode {
 				await this.handleClearCommand();
 				return;
 			}
+			if (text === "/context") {
+				this.editor.setText("");
+				await this.handleContextCommand();
+				return;
+			}
 			if (text === "/compact" || text.startsWith("/compact ")) {
 				const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
 				this.editor.setText("");
@@ -4307,6 +4312,23 @@ export class InteractiveMode {
 
 		this.bashComponent = undefined;
 		this.ui.requestRender();
+	}
+
+	private async handleContextCommand(): Promise<void> {
+		const { collectCurationState, buildCompressedMap, formatCompressedMap } = await import(
+			"../../core/context-curation.js"
+		);
+		const path = this.sessionManager.getBranch();
+		const state = collectCurationState(path);
+		const mapLines = buildCompressedMap(path, state);
+		const mapText = formatCompressedMap(mapLines);
+
+		const totalEntries = mapLines.length;
+		const removedEntries = mapLines.filter((l) => l.isRemoved).length;
+		const synthesisEntries = mapLines.filter((l) => l.isSynthesis).length;
+
+		const header = `Context Map: ${totalEntries} entries, ${removedEntries} removed, ${synthesisEntries} synthesis`;
+		this.showStatus(`${header}\n${mapText}`);
 	}
 
 	private async handleCompactCommand(customInstructions?: string): Promise<void> {

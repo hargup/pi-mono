@@ -360,6 +360,16 @@ export function buildSessionContext(
 		}
 	}
 
+	// Collect context curation annotations (remove/restore, last-write-wins)
+	const removedIds = new Set<string>();
+	for (const entry of path) {
+		if (entry.type === "custom" && entry.customType === "context_annotation" && entry.data) {
+			const data = entry.data as { action: string; targetEntryId: string };
+			if (data.action === "remove") removedIds.add(data.targetEntryId);
+			else if (data.action === "restore") removedIds.delete(data.targetEntryId);
+		}
+	}
+
 	// Build messages and collect corresponding entries
 	// When there's a compaction, we need to:
 	// 1. Emit summary first (entry = compaction)
@@ -368,6 +378,9 @@ export function buildSessionContext(
 	const messages: AgentMessage[] = [];
 
 	const appendMessage = (entry: SessionEntry) => {
+		// Skip entries removed by context curation
+		if (removedIds.has(entry.id)) return;
+
 		if (entry.type === "message") {
 			messages.push(entry.message);
 		} else if (entry.type === "custom_message") {
