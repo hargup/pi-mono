@@ -80,6 +80,7 @@ import type { SettingsManager } from "./settings-manager.js";
 import { BUILTIN_SLASH_COMMANDS, type SlashCommandInfo, type SlashCommandLocation } from "./slash-commands.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import type { BashOperations } from "./tools/bash.js";
+import { createContextManageTool } from "./tools/context-manage.js";
 import { createAllTools } from "./tools/index.js";
 
 // ============================================================================
@@ -2090,6 +2091,10 @@ export class AgentSession {
 
 		this._baseToolRegistry = new Map(Object.entries(baseTools).map(([name, tool]) => [name, tool as AgentTool]));
 
+		// Register context_manage tool (agent self-management of context)
+		const contextManageTool = createContextManageTool(this.sessionManager);
+		this._baseToolRegistry.set(contextManageTool.name, contextManageTool as unknown as AgentTool);
+
 		const extensionsResult = this._resourceLoader.getExtensions();
 		if (options.flagValues) {
 			for (const [name, value] of options.flagValues) {
@@ -2133,7 +2138,7 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write"];
+			: ["read", "bash", "edit", "write", "context_manage"];
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		const activeToolNameSet = new Set<string>(baseActiveToolNames);
 		if (options.includeAllExtensionTools) {

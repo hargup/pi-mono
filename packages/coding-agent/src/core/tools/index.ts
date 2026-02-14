@@ -9,6 +9,11 @@ export {
 	createBashTool,
 } from "./bash.js";
 export {
+	type ContextManageDetails,
+	type ContextManageInput,
+	createContextManageTool,
+} from "./context-manage.js";
+export {
 	createEditTool,
 	type EditOperations,
 	type EditToolDetails,
