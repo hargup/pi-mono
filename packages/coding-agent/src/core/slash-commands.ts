@@ -34,6 +34,11 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "compact-head", description: "Compact oldest N messages (head-first compaction)" },
 	{ name: "context", description: "Show compressed context map (entries, status, annotations)" },
+	{
+		name: "context-manage",
+		description:
+			"Manually curate context: /context-manage remove <id,...> | restore <id,...> | synthesis <title> :: <body>",
+	},
 	{ name: "resume", description: "Resume a different session" },
 	{ name: "reload", description: "Reload extensions, skills, prompts, and themes" },
 	{ name: "quit", description: "Quit pi" },

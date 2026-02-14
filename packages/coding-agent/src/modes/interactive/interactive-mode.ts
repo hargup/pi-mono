@@ -1950,6 +1950,11 @@ export class InteractiveMode {
 				await this.handleContextCommand();
 				return;
 			}
+			if (text === "/context-manage" || text.startsWith("/context-manage ")) {
+				this.editor.setText("");
+				await this.handleContextManageCommand(text);
+				return;
+			}
 			if (text === "/compact" || text.startsWith("/compact ")) {
 				const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
 				this.editor.setText("");
@@ -4323,6 +4328,163 @@ export class InteractiveMode {
 		const synthesisEntries = mapLines.filter((l) => l.isSynthesis).length;
 
 		const header = `Context Map: ${totalEntries} entries, ${removedEntries} removed, ${synthesisEntries} synthesis`;
+		this.showStatus(`${header}\n${mapText}`);
+	}
+
+	private async handleContextManageCommand(rawText: string): Promise<void> {
+		const {
+			collectCurationState,
+			buildCompressedMap,
+			formatCompressedMap,
+			CONTEXT_ANNOTATION_TYPE,
+			CONTEXT_SYNTHESIS_TYPE,
+		} = await import("../../core/context-curation.js");
+		const args = rawText.replace(/^\/context-manage\s*/, "").trim();
+
+		if (!args) {
+			this.showStatus(
+				"Usage:\n" +
+					"  /context-manage remove <id1>,<id2>,...\n" +
+					"  /context-manage restore <id1>,<id2>,...\n" +
+					"  /context-manage synthesis <title> :: <body>\n" +
+					"  /context-manage json {remove:[...],restore:[...],add_synthesis:[...]}\n" +
+					"\nUse /context to see the map with entry IDs.",
+			);
+			return;
+		}
+
+		const path = this.sessionManager.getBranch();
+		const entryIds = new Set(path.map((e) => e.id));
+		let applied = "";
+
+		// JSON mode: /context-manage json {...}
+		if (args.startsWith("json ")) {
+			try {
+				const json = JSON.parse(args.slice(5).trim());
+				const badIds: string[] = [];
+
+				for (const id of json.remove ?? []) {
+					if (!entryIds.has(id)) {
+						badIds.push(id);
+						continue;
+					}
+					this.sessionManager.appendCustomEntry(CONTEXT_ANNOTATION_TYPE, {
+						action: "remove",
+						targetEntryId: id,
+					});
+				}
+				for (const id of json.restore ?? []) {
+					if (!entryIds.has(id)) {
+						badIds.push(id);
+						continue;
+					}
+					this.sessionManager.appendCustomEntry(CONTEXT_ANNOTATION_TYPE, {
+						action: "restore",
+						targetEntryId: id,
+					});
+				}
+				for (const synth of json.add_synthesis ?? []) {
+					const content = `## ${synth.title}\n\n${synth.body}`;
+					this.sessionManager.appendCustomMessageEntry(CONTEXT_SYNTHESIS_TYPE, content, true);
+				}
+
+				const removedCount = (json.remove ?? []).length;
+				const restoredCount = (json.restore ?? []).length;
+				const synthCount = (json.add_synthesis ?? []).length;
+				applied = `Applied: ${removedCount} removed, ${restoredCount} restored, ${synthCount} synthesis`;
+				if (badIds.length > 0) {
+					applied += `\n⚠ Unknown IDs skipped: ${badIds.join(", ")}`;
+				}
+			} catch (e) {
+				this.showWarning(`Invalid JSON: ${(e as Error).message}`);
+				return;
+			}
+		}
+
+		// /context-manage remove <ids>
+		else if (args.startsWith("remove ")) {
+			const ids = args
+				.slice(7)
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const badIds: string[] = [];
+			let count = 0;
+			for (const id of ids) {
+				if (!entryIds.has(id)) {
+					badIds.push(id);
+					continue;
+				}
+				this.sessionManager.appendCustomEntry(CONTEXT_ANNOTATION_TYPE, {
+					action: "remove",
+					targetEntryId: id,
+				});
+				count++;
+			}
+			applied = `Removed ${count} entries`;
+			if (badIds.length > 0) {
+				applied += `\n⚠ Unknown IDs skipped: ${badIds.join(", ")}`;
+			}
+		}
+
+		// /context-manage restore <ids>
+		else if (args.startsWith("restore ")) {
+			const ids = args
+				.slice(8)
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const badIds: string[] = [];
+			let count = 0;
+			for (const id of ids) {
+				if (!entryIds.has(id)) {
+					badIds.push(id);
+					continue;
+				}
+				this.sessionManager.appendCustomEntry(CONTEXT_ANNOTATION_TYPE, {
+					action: "restore",
+					targetEntryId: id,
+				});
+				count++;
+			}
+			applied = `Restored ${count} entries`;
+			if (badIds.length > 0) {
+				applied += `\n⚠ Unknown IDs skipped: ${badIds.join(", ")}`;
+			}
+		}
+
+		// /context-manage synthesis <title> :: <body>
+		else if (args.startsWith("synthesis ")) {
+			const rest = args.slice(10);
+			const sepIdx = rest.indexOf("::");
+			if (sepIdx === -1) {
+				this.showWarning("Usage: /context-manage synthesis <title> :: <body>");
+				return;
+			}
+			const title = rest.slice(0, sepIdx).trim();
+			const body = rest.slice(sepIdx + 2).trim();
+			if (!title || !body) {
+				this.showWarning("Both title and body are required");
+				return;
+			}
+			const content = `## ${title}\n\n${body}`;
+			this.sessionManager.appendCustomMessageEntry(CONTEXT_SYNTHESIS_TYPE, content, true);
+			applied = `Added synthesis: "${title}"`;
+		} else {
+			this.showWarning("Unknown subcommand. Use: remove, restore, synthesis, or json");
+			return;
+		}
+
+		// Show updated map
+		const updatedPath = this.sessionManager.getBranch();
+		const state = collectCurationState(updatedPath);
+		const mapLines = buildCompressedMap(updatedPath, state);
+		const totalEntries = mapLines.length;
+		const removedEntries = mapLines.filter((l) => l.isRemoved).length;
+		const synthesisEntries = mapLines.filter((l) => l.isSynthesis).length;
+
+		const header = `${applied}\nContext Map: ${totalEntries} entries, ${removedEntries} removed, ${synthesisEntries} synthesis`;
+		const mapText = formatCompressedMap(mapLines);
 		this.showStatus(`${header}\n${mapText}`);
 	}
 
