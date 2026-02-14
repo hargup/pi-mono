@@ -81,6 +81,8 @@ Example payload:
 
 `context_summary` cache reading is currently off by default.
 
+For implementation details, invariants, and extension guidance, see [context-management-dev.md](./context-management-dev.md).
+
 Enable it with:
 
 ```bash

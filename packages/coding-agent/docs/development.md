@@ -67,3 +67,7 @@ packages/
   tui/          # Terminal UI components
   coding-agent/ # CLI and interactive mode
 ```
+
+## Feature Internals
+
+- [Context management (developer internals)](./context-management-dev.md)
