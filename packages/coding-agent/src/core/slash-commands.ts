@@ -38,10 +38,6 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 		description:
 			"Inspect/manage context: /context, /context remove <id,...>, /context restore <id,...>, /context note <title> :: <body>",
 	},
-	{
-		name: "context-manage",
-		description: "Deprecated alias for /context",
-	},
 	{ name: "resume", description: "Resume a different session" },
 	{ name: "reload", description: "Reload extensions, skills, prompts, and themes" },
 	{ name: "quit", description: "Quit pi" },
