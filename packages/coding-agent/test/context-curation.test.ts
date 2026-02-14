@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+	applyContextMutations,
 	buildCompressedMap,
 	CONTEXT_ANNOTATION_TYPE,
 	CONTEXT_SUMMARY_TYPE,
@@ -14,6 +15,7 @@ import {
 	type ContextAnnotationData,
 	type ContextSummaryData,
 	collectCurationState,
+	createContextSnapshot,
 	formatCompressedMap,
 } from "../src/core/context-curation.js";
 import { SessionManager } from "../src/core/session-manager.js";
@@ -248,6 +250,73 @@ describe("buildSessionContext with curation", () => {
 
 		const ctx = sm.buildSessionContext();
 		expect(ctx.messages.length).toBe(3); // user, assistant, synthesis
+	});
+});
+
+// ============================================================================
+// applyContextMutations
+// ============================================================================
+
+describe("applyContextMutations", () => {
+	it("supports display aliases (N-xxx) for remove/restore", () => {
+		const sm = createSessionWithMessages();
+		addUserMessage(sm, "alpha");
+		addAssistantMessage(sm, "beta");
+		addUserMessage(sm, "gamma");
+
+		const snapshot = createContextSnapshot(sm.getBranch());
+		const alias = `N-${String(snapshot.lines[0].displayIndex).padStart(3, "0")}`;
+
+		const removed = applyContextMutations(sm, {
+			remove: [alias],
+			currentLeafId: sm.getLeafId(),
+		});
+		expect(removed.removedCount).toBe(1);
+		expect(sm.buildSessionContext().messages.length).toBe(2);
+
+		const restored = applyContextMutations(sm, {
+			restore: [alias],
+			currentLeafId: sm.getLeafId(),
+		});
+		expect(restored.restoredCount).toBe(1);
+		expect(sm.buildSessionContext().messages.length).toBe(3);
+	});
+
+	it("cascade-removes direct tool results when removing assistant tool-call entry", () => {
+		const sm = createSessionWithMessages();
+		addUserMessage(sm, "read this");
+		const assistId = addAssistantWithToolCall(sm, "read", { path: "foo.ts" });
+		const tcId = getToolCallId(sm, assistId);
+		addToolResult(sm, tcId, "read", "contents");
+		addAssistantMessage(sm, "done");
+
+		const result = applyContextMutations(sm, {
+			remove: [assistId],
+			currentLeafId: sm.getLeafId(),
+		});
+		expect(result.removedCount).toBe(2); // assistant + direct tool result
+
+		const ctx = sm.buildSessionContext();
+		// keep: user + final assistant
+		expect(ctx.messages.length).toBe(2);
+	});
+
+	it("warns and skips restore behind compaction boundary", () => {
+		const sm = createSessionWithMessages();
+		const oldId = addUserMessage(sm, "old");
+		addAssistantMessage(sm, "old-r");
+		const keepId = addUserMessage(sm, "new");
+		addAssistantMessage(sm, "new-r");
+
+		sm.appendCompaction("summary", keepId, 100, undefined, false);
+
+		const result = applyContextMutations(sm, {
+			restore: [oldId],
+			currentLeafId: sm.getLeafId(),
+		});
+
+		expect(result.restoredCount).toBe(0);
+		expect(result.warnings.some((w) => w.includes("compaction boundary"))).toBe(true);
 	});
 });
 

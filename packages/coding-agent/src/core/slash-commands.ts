@@ -33,11 +33,14 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "new", description: "Start a new session" },
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "compact-head", description: "Compact oldest N messages (head-first compaction)" },
-	{ name: "context", description: "Show compressed context map (entries, status, annotations)" },
+	{
+		name: "context",
+		description:
+			"Inspect/manage context: /context, /context remove <id,...>, /context restore <id,...>, /context note <title> :: <body>",
+	},
 	{
 		name: "context-manage",
-		description:
-			"Manually curate context: /context-manage remove <id,...> | restore <id,...> | synthesis <title> :: <body>",
+		description: "Deprecated alias for /context",
 	},
 	{ name: "resume", description: "Resume a different session" },
 	{ name: "reload", description: "Reload extensions, skills, prompts, and themes" },

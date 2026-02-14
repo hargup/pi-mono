@@ -2092,7 +2092,9 @@ export class AgentSession {
 		this._baseToolRegistry = new Map(Object.entries(baseTools).map(([name, tool]) => [name, tool as AgentTool]));
 
 		// Register context_manage tool (agent self-management of context)
-		const contextManageTool = createContextManageTool(this.sessionManager);
+		const contextManageTool = createContextManageTool(this.sessionManager, {
+			onMutated: () => this.refreshContextFromSession(),
+		});
 		this._baseToolRegistry.set(contextManageTool.name, contextManageTool as unknown as AgentTool);
 
 		const extensionsResult = this._resourceLoader.getExtensions();
@@ -2907,6 +2909,15 @@ export class AgentSession {
 			contextWindow,
 			percent,
 		};
+	}
+
+	/**
+	 * Rehydrate runtime agent messages from session-manager context resolution.
+	 * Use after session-level context mutations (e.g. context curation annotations).
+	 */
+	refreshContextFromSession(): void {
+		const sessionContext = this.sessionManager.buildSessionContext();
+		this.agent.replaceMessages(sessionContext.messages);
 	}
 
 	/**
