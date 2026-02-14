@@ -315,6 +315,9 @@ Entries form a tree:
    - Then messages from `firstKeptEntryId` to compaction
    - Then messages after compaction
 4. Converts `BranchSummaryEntry` and `CustomMessageEntry` to appropriate message formats
+5. Applies context curation annotations (`customType: "context_annotation"`) so removed entries are excluded and restored entries are included (last-write-wins)
+
+For user-facing context curation commands and workflows, see [context-management.md](./context-management.md).
 
 ## Parsing Example
 

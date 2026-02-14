@@ -159,6 +159,7 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/fork` | Create a new session from the current branch |
 | `/compact [prompt]` | Manually compact context, optional custom instructions |
 | `/compact-head <n> [prompt]` | Manually compact the oldest `n` messages (head), keep newer tail untouched |
+| `/context` | Inspect/manage effective context (`remove`, `restore`, `note`, `reset`) — see [docs/context-management.md](docs/context-management.md) |
 | `/copy` | Copy last assistant message to clipboard |
 | `/export [file]` | Export session to HTML file |
 | `/share` | Upload as private GitHub gist with shareable HTML link |
@@ -565,6 +566,7 @@ pi --thinking high "Solve this complex problem"
 | `PI_PACKAGE_DIR` | Override package directory (useful for Nix/Guix where store paths tokenize poorly) |
 | `PI_SKIP_VERSION_CHECK` | Skip version check at startup |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache (Anthropic: 1h, OpenAI: 24h) |
+| `PI_CONTEXT_SUMMARY_CACHE` | Set to `1` to enable reading `context_summary` cache entries in `/context` maps (phase-2, off by default) |
 | `VISUAL`, `EDITOR` | External editor for Ctrl+G |
 
 ---
