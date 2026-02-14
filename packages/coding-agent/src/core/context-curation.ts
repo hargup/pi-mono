@@ -23,6 +23,7 @@ import type {
 export const CONTEXT_ANNOTATION_TYPE = "context_annotation";
 export const CONTEXT_SUMMARY_TYPE = "context_summary";
 export const CONTEXT_SYNTHESIS_TYPE = "context_synthesis";
+export const CONTEXT_SUMMARY_CACHE_ENV = "PI_CONTEXT_SUMMARY_CACHE";
 
 // ============================================================================
 // Types
@@ -54,6 +55,14 @@ export interface CurationState {
 	compactedIds: Set<string>;
 }
 
+export interface CollectCurationStateOptions {
+	/**
+	 * Enable reading context_summary cache entries.
+	 * Default: false unless PI_CONTEXT_SUMMARY_CACHE=1.
+	 */
+	enableSummaryCache?: boolean;
+}
+
 /** A single line in the compressed context map */
 export interface MapLine {
 	/** 1-based sequential display index */
@@ -73,6 +82,11 @@ export interface MapLine {
 export interface CompressedMapOptions {
 	/** Max chars of bash/tool output to inline before collapsing to line-count */
 	outputInlineThreshold?: number;
+	/**
+	 * Enable reading context_summary cache entries.
+	 * Default: false unless PI_CONTEXT_SUMMARY_CACHE=1.
+	 */
+	enableSummaryCache?: boolean;
 }
 
 export interface ContextSnapshot {
@@ -104,13 +118,22 @@ export interface ContextMutationResult {
 // ============================================================================
 
 /**
+ * Summary-cache is phase-2 (scorer-driven) and disabled by default.
+ * Enable globally with PI_CONTEXT_SUMMARY_CACHE=1.
+ */
+export function isContextSummaryCacheEnabled(): boolean {
+	return process.env[CONTEXT_SUMMARY_CACHE_ENV] === "1";
+}
+
+/**
  * Walk branch path and collect effective curation state.
  * Last-write-wins for remove/restore annotations.
  */
-export function collectCurationState(path: SessionEntry[]): CurationState {
+export function collectCurationState(path: SessionEntry[], options: CollectCurationStateOptions = {}): CurationState {
 	const removedIds = new Set<string>();
 	const summaryCache = new Map<string, string>();
 	const compactedIds = new Set<string>();
+	const enableSummaryCache = options.enableSummaryCache ?? isContextSummaryCacheEnabled();
 
 	let compactionEntry: CompactionEntry | null = null;
 	for (const entry of path) {
@@ -143,7 +166,7 @@ export function collectCurationState(path: SessionEntry[]): CurationState {
 			if (data.action === "restore") removedIds.delete(data.targetEntryId);
 		}
 
-		if (custom.customType === CONTEXT_SUMMARY_TYPE && custom.data) {
+		if (enableSummaryCache && custom.customType === CONTEXT_SUMMARY_TYPE && custom.data) {
 			const data = custom.data as ContextSummaryData;
 			summaryCache.set(data.targetEntryId, data.summary);
 		}
@@ -201,7 +224,7 @@ export function buildDisplayIdLookup(lines: MapLine[]): Map<string, string> {
 }
 
 export function createContextSnapshot(path: SessionEntry[], options?: CompressedMapOptions): ContextSnapshot {
-	const state = collectCurationState(path);
+	const state = collectCurationState(path, { enableSummaryCache: options?.enableSummaryCache });
 	const lines = buildCompressedMap(path, state, options);
 	const text = formatCompressedMap(lines);
 	const totalEntries = lines.length;

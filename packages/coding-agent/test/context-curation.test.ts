@@ -154,7 +154,7 @@ describe("collectCurationState", () => {
 		expect(state.removedIds.has(uid)).toBe(false);
 	});
 
-	it("collects cached summaries", () => {
+	it("ignores cached summaries by default (phase-2 feature off)", () => {
 		const sm = createSessionWithMessages();
 		const uid = addUserMessage(sm, "hello");
 		addAssistantMessage(sm, "hi");
@@ -167,6 +167,22 @@ describe("collectCurationState", () => {
 		} satisfies ContextSummaryData);
 
 		const state = collectCurationState(sm.getBranch());
+		expect(state.summaryCache.size).toBe(0);
+	});
+
+	it("collects cached summaries when feature flag is enabled", () => {
+		const sm = createSessionWithMessages();
+		const uid = addUserMessage(sm, "hello");
+		addAssistantMessage(sm, "hi");
+
+		sm.appendCustomEntry(CONTEXT_SUMMARY_TYPE, {
+			targetEntryId: uid,
+			summary: "User greeting",
+			model: "test-model",
+			generatedAt: new Date().toISOString(),
+		} satisfies ContextSummaryData);
+
+		const state = collectCurationState(sm.getBranch(), { enableSummaryCache: true });
 		expect(state.summaryCache.get(uid)).toBe("User greeting");
 	});
 });
@@ -407,7 +423,7 @@ describe("buildCompressedMap", () => {
 		} satisfies ContextSummaryData);
 
 		const path = sm.getBranch();
-		const state = collectCurationState(path);
+		const state = collectCurationState(path, { enableSummaryCache: true });
 		const lines = buildCompressedMap(path, state);
 
 		const userLine = lines.find((l) => l.entryId === uid);
